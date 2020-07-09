@@ -2,86 +2,128 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score
 
 from qiskit import IBMQ, BasicAer
+from qiskit.circuit import QuantumCircuit, Parameter
 from qiskit.circuit.library import ZZFeatureMap, TwoLocal
 from qiskit.aqua import QuantumInstance
 from qiskit.aqua.algorithms import VQC
 from qiskit.aqua.components import variational_forms
-from qiskit.aqua.components.optimizers import COBYLA, ADAM
+from qiskit.aqua.components.optimizers import COBYLA, ADAM, SPSA
+
+# setup aqua logging
+import logging
+from qiskit.aqua import set_qiskit_aqua_logging
+set_qiskit_aqua_logging(logging.DEBUG)  # choose INFO, DEBUG to see the log
 
 from data_provider import load_titanic_pd
 from utils import record_test_result_for_kaggle
+from quantum_utils import select_features, encoder_3bits_1qubit
 
-np.random.seed(123123)
 
-train_file = "train.csv"
-test_file = "test.csv"
+def sampling_dataset(df_train, y_train, df_test, y_test=None, pos_sample=None, neg_sample=None):
+    np.random.seed(777)
 
-df_train, y_train, df_test = load_titanic_pd(train_file, test_file)
+    if pos_sample and neg_sample:
+        y_train = np.array(y_train)
+        pos_label = np.argwhere(y_train == 1).reshape([-1])
+        chosen_pos_label_idx = pos_label[np.random.permutation(len(pos_label))[:pos_sample]]
 
-# model
-print("-----\nFull features:")
-model = RandomForestClassifier()
-model.fit(df_train, y_train)
-# Train score
-print("Final train score: %f" % model.score(df_train, y_train))
-# F1 score
-print("Final F1 score: %f" % f1_score(y_train, model.predict(df_train)))
+        neg_label = np.argwhere(y_train == 0).reshape([-1])
+        chosen_neg_label_idx = neg_label[np.random.permutation(len(neg_label))[:neg_sample]]
 
-col_num = 2
-mvp_col = df_train.columns[sorted(range(len(model.feature_importances_)),
-                                  key=lambda x: model.feature_importances_[x],
-                                  reverse=True)[:col_num]].tolist()
+        print("Postive sample num: %d" % len(pos_label))
+        print("Negative sample num: %d" % len(neg_label))
 
-print("Selected features: %s" % ",".join(mvp_col))
+        # Construct dict to feed QSVM
+        training_input = {
+            0: df_train[chosen_pos_label_idx],
+            1: df_train[chosen_neg_label_idx]
+        }
+    else:
+        # Construct dict to feed QSVM
+        training_input = {
+            0: df_train[y_train == 0],
+            1: df_train[y_train == 1]
+        }
+    # print(training_input)
+    test_input = df_test
+    return training_input, test_input
 
-df_train_q = df_train[mvp_col].values
-df_test_q = df_test[mvp_col].values
 
-# Choose balance 50 sample
-# 25 pos, 25 neg
+if __name__ == "__main__":
+    USE_ENCODER = True
+    FEAT_NUM = 4
+    POS_SAMPLE = None
+    NEG_SAMPLE = None
+    OPTIMIZER = SPSA
+    VAR_FORM = variational_forms.RYRZ
+    FEAT_MAP = "Ours"
 
-np.random.seed(777)
+    BACKEND = "simulator" # or "real"
 
-pos_sample = 100
-neg_sample = 100
+    np.random.seed(123123)
 
-y_train = np.array(y_train)
-pos_label = np.argwhere(y_train == 1).reshape([-1])
-chosen_pos_label_idx = pos_label[np.random.permutation(len(pos_label))[:pos_sample]]
+    train_file = "train.csv"
+    test_file = "test.csv"
 
-neg_label = np.argwhere(y_train == 0).reshape([-1])
-chosen_neg_label_idx = neg_label[np.random.permutation(len(neg_label))[:neg_sample]]
+    df_train, y_train, df_test = load_titanic_pd(train_file, test_file)
 
-print("Postive sample num: %d" % len(pos_label))
-print("Negative sample num: %d" % len(neg_label))
-# Construct dict to feed QSVM
-training_input = {
-    0: df_train_q[chosen_pos_label_idx],
-    1: df_train_q[chosen_neg_label_idx]
-}
+    mvp_col = select_features(df_train, y_train, feat_num=FEAT_NUM, modelname="RandomForestClassifier")
 
-test_input = df_test_q
+    df_train_q, df_test_q = df_train[mvp_col], df_test[mvp_col]
 
-###### data prepared
-print("data prepared.")
-###### building quantum dude
-seed = 10598
-# seed = 1024
-var_form = variational_forms.RYRZ(2)
-feature_map = ZZFeatureMap(feature_dimension=len(mvp_col), reps=2, entanglement='linear')
-qsvm = VQC(ADAM(100), feature_map, var_form, training_input)
-backend = BasicAer.get_backend('qasm_simulator')
-quantum_instance = QuantumInstance(backend, shots=1024, seed_simulator=seed, seed_transpiler=seed, optimization_level=3)
-result = qsvm.run(quantum_instance)
+    # encode with 3-1
+    if USE_ENCODER:
+        print("encoding...")
+        df_train_q = encoder_3bits_1qubit(df_train_q)
+        df_test_q = encoder_3bits_1qubit(df_test_q)
 
-y_pred = qsvm.predict(df_train_q)[1]
-print("Final train acc: %f\nFinal train F1:%f" % (np.mean(y_pred == y_train), f1_score(y_pred, y_train)))
+    # Choose balance 200 sample
+    # 100 pos, 100 neg
+    training_input, test_input = sampling_dataset(df_train_q, y_train, df_test_q,
+                                                  pos_sample=POS_SAMPLE, neg_sample=NEG_SAMPLE)
 
-y_pred = qsvm.predict(df_test_q)[1]
-# print(y_pred)
+    ###### data prepared
+    print("data prepared.")
+    ###### building quantum dude
+    seed = 10598
+    var_form = VAR_FORM(num_qubits=df_train_q.shape[1] // 2, depth=4)
 
-record_test_result_for_kaggle(y_pred, submission_file="quantum_submission.csv")
+    if FEAT_MAP == "ZZMap":
+        feature_map = ZZFeatureMap(feature_dimension=len(mvp_col), reps=2, entanglement='linear')
+    elif FEAT_MAP == "Ours":
+        X = [Parameter(f'x[{i}]') for i in range(df_train_q.shape[1])]
+
+        var_form = VAR_FORM(df_train_q.shape[1] // 2)
+
+        qc = QuantumCircuit(df_train_q.shape[1] // 2)
+
+        for i in range(df_train_q.shape[1] // 2):
+            qc.u3(X[2 * i], X[2 * i + 1], 0, i)  # Encoder
+
+        feature_map = qc  # + tmp1 + tmp2
+    else:
+        raise NameError("Unknown feature map.")
+
+    qsvm = VQC(OPTIMIZER(100), feature_map, var_form, training_input)
+
+    if BACKEND == "simulator":
+        backend = BasicAer.get_backend('qasm_simulator')
+    elif BACKEND == "real":
+        provider = IBMQ.get_provider()
+        backend = provider.get_backend('ibmq_london')
+    else:
+        raise NameError("Plz choose simulator/real")
+
+    quantum_instance = QuantumInstance(backend, shots=1024, seed_simulator=seed, seed_transpiler=seed, optimization_level=3)
+    result = qsvm.run(quantum_instance)
+
+    y_pred = qsvm.predict(df_train_q)[1]
+    print("Final train acc: %f\nFinal train F1:%f" % (np.mean(y_pred == y_train), f1_score(y_pred, y_train)))
+
+    y_pred = qsvm.predict(df_test_q)[1]
+    # print(y_pred)
+
+    record_test_result_for_kaggle(y_pred, submission_file="quantum_submission.csv")
