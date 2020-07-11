@@ -10,7 +10,7 @@ from qiskit.circuit.library import ZZFeatureMap, TwoLocal
 from qiskit.aqua import QuantumInstance
 from qiskit.aqua.algorithms import VQC
 from qiskit.aqua.components import variational_forms
-from qiskit.aqua.components.optimizers import COBYLA
+from qiskit.aqua.components.optimizers import COBYLA, ADAM
 
 np.random.seed(123123)
 
@@ -48,6 +48,10 @@ print("Test score: %f" % model.score(df_test, y_test))
 # F1 score
 print("F1 score: %f" % f1_score(y_test, model.predict(df_test)))
 
+print("-----\nMajority")
+print("Test acc: %f\nTest F1:%f" % (np.mean(np.zeros_like(y_test) == y_test), f1_score(np.zeros_like(y_test), y_test)))
+
+print("-----\nQuantum")
 # Get most important col
 # 2 columns
 col_num = 2
@@ -75,10 +79,12 @@ chosen_pos_label_idx = pos_label[np.random.permutation(len(pos_label))[:pos_samp
 neg_label = np.argwhere(y_train == 0).reshape([-1])
 chosen_neg_label_idx = neg_label[np.random.permutation(len(neg_label))[:neg_sample]]
 
+print("Postive sample num: %d" % len(pos_label))
+print("Negative sample num: %d" % len(neg_label))
 # Construct dict to feed QSVM
 training_input = {
     0: df_train_q[y_train == 0],
-    1: df_train_q[y_train == 1]
+    1: np.concatenate([df_train_q[y_train == 1], df_train_q[y_train == 1]], axis=1)
 }
 
 test_input = {
@@ -88,16 +94,15 @@ test_input = {
 ###### data prepared
 print("data prepared.")
 ###### building quantum dude
-# seed = 10598
-seed = 1024
+seed = 10598
+# seed = 1024
 var_form = variational_forms.RYRZ(2)
-feature_map = ZZFeatureMap(feature_dimension=len(mvp_col), reps=3, entanglement='linear')
-qsvm = VQC(COBYLA(100), feature_map, var_form, training_input)
+feature_map = ZZFeatureMap(feature_dimension=len(mvp_col), reps=2, entanglement='linear')
+qsvm = VQC(ADAM(100), feature_map, var_form, training_input)
 backend = BasicAer.get_backend('qasm_simulator')
-quantum_instance = QuantumInstance(backend, shots=1024, seed_simulator=seed, seed_transpiler=seed,optimization_level=3)
+quantum_instance = QuantumInstance(backend, shots=1024, seed_simulator=seed, seed_transpiler=seed, optimization_level=3)
 result = qsvm.run(quantum_instance)
 
 y_pred = qsvm.predict(df_test_q)[1]
 
-print("Test acc: %f\nTest F1:%f" %
-      (np.mean(y_pred == y_test), f1_score(y_test, y_pred)))
+print("Test acc: %f\nTest F1:%f" % (np.mean(y_pred == y_test), f1_score(y_test, y_pred)))

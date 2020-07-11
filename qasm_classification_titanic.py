@@ -55,13 +55,14 @@ def sampling_dataset(df_train, y_train, df_test, y_test=None, pos_sample=None, n
 if __name__ == "__main__":
     USE_ENCODER = True
     FEAT_NUM = 4
+    ITER = 100
     POS_SAMPLE = None
     NEG_SAMPLE = None
-    OPTIMIZER = SPSA
+    OPTIMIZER = SPSA # SPSA
     VAR_FORM = variational_forms.RYRZ
-    FEAT_MAP = "Ours"
+    FEAT_MAP = "ZZMap"  # or "Ours"
 
-    BACKEND = "simulator" # or "real"
+    BACKEND = "simulator"  # or "real"
 
     np.random.seed(123123)
 
@@ -79,6 +80,9 @@ if __name__ == "__main__":
         print("encoding...")
         df_train_q = encoder_3bits_1qubit(df_train_q)
         df_test_q = encoder_3bits_1qubit(df_test_q)
+    else:
+        df_train_q = df_train_q.values
+        df_test_q = df_test_q.values
 
     # Choose balance 200 sample
     # 100 pos, 100 neg
@@ -92,7 +96,7 @@ if __name__ == "__main__":
     var_form = VAR_FORM(num_qubits=df_train_q.shape[1] // 2, depth=4)
 
     if FEAT_MAP == "ZZMap":
-        feature_map = ZZFeatureMap(feature_dimension=len(mvp_col), reps=2, entanglement='linear')
+        feature_map = ZZFeatureMap(feature_dimension=len(mvp_col), reps=3, entanglement='linear')
     elif FEAT_MAP == "Ours":
         X = [Parameter(f'x[{i}]') for i in range(df_train_q.shape[1])]
 
@@ -107,7 +111,7 @@ if __name__ == "__main__":
     else:
         raise NameError("Unknown feature map.")
 
-    qsvm = VQC(OPTIMIZER(100), feature_map, var_form, training_input)
+    qsvm = VQC(OPTIMIZER(ITER), feature_map, var_form, training_input)
 
     if BACKEND == "simulator":
         backend = BasicAer.get_backend('qasm_simulator')
@@ -124,6 +128,6 @@ if __name__ == "__main__":
     print("Final train acc: %f\nFinal train F1:%f" % (np.mean(y_pred == y_train), f1_score(y_pred, y_train)))
 
     y_pred = qsvm.predict(df_test_q)[1]
-    # print(y_pred)
+    print(y_pred)
 
     record_test_result_for_kaggle(y_pred, submission_file="quantum_submission.csv")
