@@ -45,11 +45,11 @@ print("F1 score: %f" % f1_score(y_test, model.predict(df_test)))
 print("-----\nPart of features:")
 # Get most important col
 # 2 columns
-col_num = 2
+col_num = 4
 mvp_col = df_train.columns[sorted(range(len(model.feature_importances_)),
                                   key=lambda x: model.feature_importances_[x],
                                   reverse=True)[:col_num]].tolist()
-# mvp_col = ['tumor-size', 'breast-quad']
+mvp_col = ['tumor-size', 'menopause', "node-caps", "deg-malig"]
 print("Selected features: %s" % ",".join(mvp_col))
 
 # Get only MVP columns
@@ -59,6 +59,10 @@ df_test_mvp = df_test[mvp_col].values
 # another model
 model_mvp = RandomForestClassifier()
 model_mvp.fit(df_train_mvp, y_train)
+# Train score
+print("Train score: %f" % model_mvp.score(df_train_mvp, y_train))
+# F1 score
+print("F1 score: %f" % f1_score(y_train, model_mvp.predict(df_train_mvp)))
 # Test score
 print("Test score: %f" % model_mvp.score(df_test_mvp, y_test))
 # F1 score

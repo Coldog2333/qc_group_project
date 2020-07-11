@@ -69,7 +69,7 @@ if __name__ == "__main__":
     train_file = "train.csv"
     test_file = "test.csv"
 
-    df_train, y_train, df_test = load_titanic_pd(train_file, test_file)
+    df_train, df_test, y_train, y_test = load_titanic_pd(train_file, test_file)
 
     mvp_col = select_features(df_train, y_train, feat_num=FEAT_NUM, modelname="RandomForestClassifier")
 
