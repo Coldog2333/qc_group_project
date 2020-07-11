@@ -2,7 +2,7 @@
 ### Topic
 **Classification with Variational Quantum Classifier**
 ### Introduction
-This is the repository of the group project of \[4810-1166 Quantum Computing / 量子計算論\] in the University of Tokyo (U-Tokyo). 
+This is the repository of the group project of \[4810-1166 **Introduction to Quantum Computation** / **量子計算論** \] in the University of Tokyo (U-Tokyo). 
 
 We performed classification on the [Breast-Cancer dataset](https://archive.ics.uci.edu/ml/datasets/breast+cancer) 
 predicted the survival of the Titanic passengers, whose dataset is provided at [kaggle](https://www.kaggle.com/c/titanic).
