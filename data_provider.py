@@ -1,6 +1,35 @@
 import numpy as np
 import pandas as pd
 from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+
+
+def load_bc_pd(file='breast-cancer.data'):
+    np.random.seed(123123)
+    # Read stuff
+    df = pd.read_csv(file, header=None,
+                     names=['target',
+                            'age',
+                            'menopause',
+                            'tumor-size',
+                            'inv-nodes',
+                            'node-caps',
+                            'deg-malig',
+                            'breast',
+                            'breast-quad',
+                            'irradiat'])
+
+    # Encode to number (numerical)
+    for col in df.columns:
+        le = preprocessing.LabelEncoder().fit(df[col])
+        df[col] = le.transform(df[col])
+
+    # Split data and target
+    df_data = df.drop(['target'], axis=1)
+    y = df.target
+    df_train, df_test, y_train, y_test = train_test_split(df_data, y.values, test_size=0.2)
+    return df_train, df_test, y_train, y_test
+
 
 def load_titanic_pd(train_file, test_file):
     # get header
@@ -30,7 +59,7 @@ def load_titanic_pd(train_file, test_file):
     print(df_train)
     y_train = df_train.Survived
     df_train = df_train.drop(["Survived"], axis=1)
-    return df_train, y_train, df_test
+    return df_train, df_test, y_train, None
 
 
 def numerical_df(df):
