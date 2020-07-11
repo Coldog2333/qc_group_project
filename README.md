@@ -2,7 +2,7 @@
 ### Topic
 **Classification with Variational Quantum Classifier**
 ### Introduction
-This is the repository of the group project of \[4810-1166 **Introduction to Quantum Computation** / **量子計算論** \] in the University of Tokyo (U-Tokyo). 
+This is the repository of the group project of \[4810-1166 Quantum Computing / 量子計算論\] in the University of Tokyo (U-Tokyo). 
 
 We performed classification on the [Breast-Cancer dataset](https://archive.ics.uci.edu/ml/datasets/breast+cancer) 
 predicted the survival of the Titanic passengers, whose dataset is provided at [kaggle](https://www.kaggle.com/c/titanic).
@@ -54,10 +54,10 @@ Dataset | Breast-Cancer | | | | Titanic | | | |
 Model | Train Acc | Train F1 | Test Acc | Test F1 | Train Acc | Train F1 | Test Acc | Test F1 | 
 :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
 Random Forest       | | | 0.7759 | 0.3810 | 0.9798 | 0.9734 | 0.7344 | |
-VQC                 | | | | | | 0.6734 | 0.5727 | 0.6292 | |
+VQC                 | | | 0.5690 | 0.3902 | 0.6734 | 0.5727 | 0.6292 | |
 VQC (real)          | | | | | | | | |
-VQC + QRAC          | | | 0.7241 | 0.4667 | 0.7868 | 0.7104 | 0.7656 | |
-VQC + QRAC (real)   | | | | | | | | |
+VQC + QRAC          | 0.7325 | 0.5674 | 0.7241 | 0.4667 | 0.7868 | 0.7104 | 0.7656 | |
+VQC + QRAC (real)   | 0.7325 | 0.5612 | 0.7069 | 0.4849 | | | | |
 
 ### Usage
 ```python
