@@ -2,16 +2,16 @@
 ### Topic
 **Classification with Variational Quantum Classifier**
 ### Introduction
-This is the repository of the group project of \[4810-1166 Quantum Computing / 量子計算論\] in the University of Tokyo (U-Tokyo). 
+This is the repository of the group project of \[4810-1166 **Introduction to Quantum Computation / 量子計算論**\] in the University of Tokyo (U-Tokyo). 
 
 We performed classification on the [Breast-Cancer dataset](https://archive.ics.uci.edu/ml/datasets/breast+cancer) 
-predicted the survival of the Titanic passengers, whose dataset is provided at [kaggle](https://www.kaggle.com/c/titanic).
+and predicted the survival of the Titanic passengers, whose dataset is provided at [kaggle](https://www.kaggle.com/c/titanic).
 
 To reduce the number of involved qubits, 
-we implement a (3,1)-QRAC to encode 3 bits category feature into 1 qubit.
+we implemented a (3,1)-QRAC to encode 3 bits category feature into 1 qubit.
 In this way, we can even obtain a performance gain.
 
-After encoding, we feed these encoded features to a VQC to perform classification.
+After encoding, we fed these encoded features to a VQC to perform classification.
 
 ### Methods
 #### Breast-Cancer
@@ -24,6 +24,9 @@ and selected four features according to the feature importance as `"tumor-size" 
 + Finally, we trained a VQC with QRAC FeatureMap over all of the data. 
 All of the parameters were optimized by SPSA optimizer with 100 iterations.
 And our model was evaluated on test set. 
+
+##### Trick
++ We oversampled (doubled) the postive samples to balance the dataset.
 
 #### Titanic
 
