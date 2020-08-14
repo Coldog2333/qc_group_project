@@ -146,6 +146,8 @@ def create_quantum_model(METHOD, num_qubit):
     """Create a QNN model circuit and readout operation to go along with it."""
     if METHOD == '16px':
         data_qubits = cirq.GridQubit.rect(4,4)  # a 4x4 grid.
+    elif METHOD == '8px':
+        data_qubits = cirq.GridQubit.rect(2,4)  # a 4x4 grid.
     else:
         data_qubits = cirq.GridQubit.rect(num_qubit,1)  # a 4x4 grid.
     readout = cirq.GridQubit(-1, -1)         # a single qubit at [-1,-1]
@@ -180,6 +182,15 @@ def convert_to_circuit(image):
             circuit.append(cirq.X(qubits[i]))
     return circuit
 
+def convert_to_circuit_8px(image):
+    """Encode truncated classical image into quantum datapoint."""
+    values = np.ndarray.flatten(image[1:3,:])
+    qubits = cirq.GridQubit.rect(2, 4)
+    circuit = cirq.Circuit()
+    for i, value in enumerate(values):
+        if value:
+            circuit.append(cirq.X(qubits[i]))
+    return circuit
 
 def convert_to_circuit_QRAC(data, num_qubit):
     """Encode truncated classical image by QRAC(3,1)."""
@@ -212,7 +223,8 @@ def main():
 
     circuit_makers = {
         'QRAC': convert_to_circuit_QRAC,
-        '16px': convert_to_circuit
+        '16px': convert_to_circuit,
+        '8px': convert_to_circuit_8px
     }
 
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -244,7 +256,7 @@ def main():
     x_train_bin = np.array(x_train_nocon > THRESHOLD, dtype=np.int32)
     x_test_bin = np.array(x_test_small > THRESHOLD, dtype=np.int32)
 
-    if METHOD != '16px':
+    if METHOD not in ['8px','16px']:
         data_train, data_test = [], []
         for row in x_train_bin:
             data_train.append(circuit_converters[METHOD](row))
@@ -258,13 +270,13 @@ def main():
     else:
         data_train = x_train_bin
         data_test = x_test_bin
-        num_qubit = 16
+        num_qubit = int(METHOD[0])
 
 
     # Create input circuit
-    if METHOD == '16px':
-        x_train_circ = [circuit_makers['16px'](x) for x in data_train]
-        x_test_circ = [circuit_makers['16px'](x) for x in data_test]
+    if METHOD in ['8px','16px']:
+        x_train_circ = [circuit_makers[METHOD](x) for x in data_train]
+        x_test_circ = [circuit_makers[METHOD](x) for x in data_test]
     else:
         x_train_circ = [circuit_makers['QRAC'](x, num_qubit) for x in data_train]
         x_test_circ = [circuit_makers['QRAC'](x, num_qubit) for x in data_test]

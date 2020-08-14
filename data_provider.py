@@ -31,7 +31,7 @@ def load_bc_pd(file='breast-cancer.data'):
     return df_train, df_test, y_train, y_test
 
 
-def load_titanic_pd(train_file, test_file):
+def load_titanic_pd(train_file, test_file, as_category=True):
     # get header
     with open(train_file) as f:
         train_header_names = f.readline().strip().split(",")
@@ -53,8 +53,9 @@ def load_titanic_pd(train_file, test_file):
     df_train = fill_NULL_df(df_train)
     df_test = fill_NULL_df(df_test)
 
-    df_train = re_numerical_df(df_train)
-    df_test = re_numerical_df(df_test)
+    if as_category:
+        df_train = re_numerical_df(df_train)
+        df_test = re_numerical_df(df_test)
 
     print(df_train)
     y_train = df_train.Survived
