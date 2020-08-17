@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
-#Tiger github
 
 def load_bc_pd(file='breast-cancer.data'):
     np.random.seed(123123)
