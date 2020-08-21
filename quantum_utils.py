@@ -144,7 +144,13 @@ class CustomFeatureMap(FeatureMap):
                            "110": np.array( [ 0, 0, 0, 1 ] ),
                            "111": np.array( [ 0, sq3, -sq3, sq3] )
         }
-        
+
+        if self._circuit_type == "X":
+            assert len(x) == len(qr), "Number of qubit not match"
+            n = len(x)
+            for i in range(n):
+                if x[i] == '1': qc.x(i)
+
 
         if self._circuit_type == "ALL3in2":
             """ using (3,2)-QRAC for encoding 3 bits """
@@ -155,7 +161,7 @@ class CustomFeatureMap(FeatureMap):
                 xi = "".join([ str(_) for _ in x[3*i:3*(i+1)] ])
                 v = threetwoqracs[xi]
                 qc.initialize(v, qr[2*i:2*(i+1)])
-       
+
         elif self._circuit_type == "ALL3in1":
             #rotate qr[0] by 3bits of x by appending "0" if less than 3 are encountered
             #assume x is a string
@@ -174,7 +180,7 @@ class CustomFeatureMap(FeatureMap):
             #    qc.h(qr[i])
             #    qc.s(qr[i])
             for i in range(n, len(qr)):
-                ii = n - i 
+                ii = n - i
                 xii = "".join([ str(_) for _ in x[3*ii:3*(ii+1)] ])
                 if self._qmap is None:
                     v = rotationParams[xii]
@@ -199,7 +205,7 @@ class CustomFeatureMap(FeatureMap):
                 #print("\t",xi)
                 v = rotationParams[xi]
                 qc.initialize(v, qr[i])
-            
+
 
         #qc.barrier()
 

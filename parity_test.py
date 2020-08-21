@@ -85,6 +85,14 @@ def main():
 
         x_st = np.array(x_st)
 
+    elif METHOD == 'naive':
+        num_qubit = num_bits
+        x_st = []
+        for x in x_train:
+            x_st.append(''.join(x.astype(str)) * DUP)
+
+        x_st = np.array(x_st)
+
     seed = 10598
 
     vqc_ordinal_log = []
@@ -92,7 +100,10 @@ def main():
     def loss_history_callback(_, __, loss, ___):
         vqc_ordinal_log.append(loss)
 
-    feature_map = CustomFeatureMap('ALL3in1', 1, num_qubit, q_maps)
+    if METHOD == 'naive':
+        feature_map = CustomFeatureMap('X', 1, num_qubit, q_maps)
+    else:
+        feature_map = CustomFeatureMap('ALL3in1', 1, num_qubit, q_maps)
     var_form = variational_forms.RYRZ(num_qubit, depth=4)
 
     training_input = {
@@ -102,7 +113,7 @@ def main():
 
     qsvm = VQC(SPSA(100), feature_map, var_form, training_input, callback=loss_history_callback)
 
-    backend_options = {"method": "statevector_gpu"}
+    backend_options = {"method": "statevector"}
     backend = QasmSimulator(backend_options)
 
     quantum_instance = QuantumInstance(backend, shots=1024, seed_simulator=seed, seed_transpiler=seed,optimization_level=3)
