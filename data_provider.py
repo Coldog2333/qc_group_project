@@ -3,7 +3,6 @@ import pandas as pd
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 
-
 def load_bc_pd(file='breast-cancer.data'):
     np.random.seed(123123)
     # Read stuff
