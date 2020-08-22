@@ -54,7 +54,7 @@ def get_input_dict_for_VQC(X_train, X_test, y_train, y_test):
 def train_vqc(feature_map, \
               var_form, \
               backend, \
-              optimizer, \
+              epoch, \
               seed, \
               X_train, X_test, y_train, y_test, \
               model_filename, \
@@ -74,29 +74,25 @@ def train_vqc(feature_map, \
     zip_obj = ZipFile(temp_model_zip_filename, 'w')
 
     # Callback function for collecting models' parameters and losses along the way
-    default_training_loss_list, training_loss_list, validation_loss_list = [], [], []
+    training_loss_list, validation_loss_list = [], []
     def callback_collector(eval_count, model_params, loss, ___):
-        # Collect default training loss
-        default_training_loss_list.append(loss)
+        # Collect training loss
+        training_loss_list.append(loss)
         # Save a temp model
         temp_model_filename = model_filename.split('.')[0] + f'_evalcount{eval_count+1}.npz'
         np.savez(temp_model_filename, opt_params = model_params)
         zip_obj.write(temp_model_filename.split('/')[-1], compress_type=ZIP_DEFLATED)
         # Load the temp model
-        vqc_val = VQC(optimizer, feature_map, var_form, training_input, test_input)
+        vqc_val = VQC(SPSA(0), feature_map, var_form, training_input, test_input)
         vqc_val.load_model(temp_model_filename)
         os.remove(temp_model_filename)
         # Collect validation loss
         y_test_prob = vqc_val.predict(X_test, quantum_instance)[0]
         val_loss = -np.mean(y_test*np.log(y_test_prob[:,1]) + (1 - y_test)*np.log(y_test_prob[:,0]))
         validation_loss_list.append(val_loss)
-        # Collect training loss
-        y_train_prob = vqc_val.predict(X_train, quantum_instance)[0]
-        train_loss = -np.mean(y_train*np.log(y_train_prob[:,1]) + (1 - y_train)*np.log(y_train_prob[:,0]))
-        training_loss_list.append(train_loss)
 
     # Run VQC
-    vqc = VQC(optimizer, feature_map, var_form, training_input, test_input, callback=callback_collector)
+    vqc = VQC(SPSA(epoch), feature_map, var_form, training_input, test_input, callback=callback_collector)
     result = vqc.run(quantum_instance)
     clear_output()
     print('Trained successfully!')
@@ -113,9 +109,7 @@ def train_vqc(feature_map, \
     print(f'Final model is saved at {final_model_filename}.\nTemp models are saved at {temp_model_zip_filename}.')
 
     # Save results
-    result['Default training losses'] = np.array(default_training_loss_list)
-    result['Training losses'] = np.array(training_loss_list)
-    result['Validation losses'] = np.array(validation_loss_list)
+    result['Training losses'], result['Validation losses'] = np.array(training_loss_list), np.array(validation_loss_list)
     result['Training F1 score'], result['Training accuracy'] = f1_train, acc_train
     result['Test F1 score'], result['Test accuracy'] = f1_test, acc_test
 
@@ -124,7 +118,7 @@ def train_vqc(feature_map, \
 def kfold_vqc(feature_map, \
               var_form, \
               backend, \
-              optimizer, \
+              epoch, \
               seed, \
               X, y, \
               model_filename, \
@@ -143,12 +137,15 @@ def kfold_vqc(feature_map, \
     zip_filename = model_filename.split('.')[0] + '.zip'
     zip_obj = ZipFile(zip_filename, 'w')
     # Final result initialization (dict)
-    result = dict()
-    result['Default training losses'], result['Training losses'], result['Validation losses'] = [], [], []
-    result['Default final test losses'], result['Default test accuracies'] = [], []
-    result['Training accuracies'], result['Test accuracies'], result['Test F1 scores'], result['Training F1 scores'] = [], [], [], []
+    params_to_collect = ['Training losses', 'Validation losses', \
+                         'Training accuracy', 'Test accuracy', \
+                         'Training F1 score', 'Test F1 score']
+    result = {key:[] for key in params_to_collect}
+    # result['Default test accuracies'] = [] # Uncomment for validating the predicted accuracy
     np.random.seed(seed_kfold)
-    for (fold, (train_id, test_id)) in enumerate(KFold(n_splits=k, shuffle=True).split(X), start=1):
+    kf = KFold(n_splits=k, shuffle=True)
+    kf_id = list(kf.split(X))
+    for (fold, (train_id, test_id)) in enumerate(kf_id, start=1):
         print('='*100 + f'\nFold number {fold}\n' + '='*100)
         # Split data
         X_train, X_test, y_train, y_test = X[train_id], X[test_id], y[train_id], y[test_id]
@@ -157,10 +154,10 @@ def kfold_vqc(feature_map, \
             X_train, y_train = np.concatenate((X_train, X_train[y_train==1]), axis=0), np.hstack((y_train, np.ones(np.sum(y_train==1))))
         # Train a model
         model_filename_fold = model_filename.split('.')[0] + f'_foldnumber{fold}.npz'
-        result_1fold = train_vqc(feature_map, \
+        result_onefold = train_vqc(feature_map, \
                                 var_form, \
                                 backend, \
-                                optimizer, \
+                                epoch, \
                                 seed, \
                                 X_train, X_test, y_train, y_test, \
                                 model_filename_fold, \
@@ -175,22 +172,16 @@ def kfold_vqc(feature_map, \
         zip_obj.write(temp_model_zip_filename_fold.split('/')[-1], compress_type=ZIP_DEFLATED)
         os.remove(temp_model_zip_filename_fold)
         # Collect results
-        result['Default training losses'].append(result_1fold['Default training losses'])
-        result['Training losses'].append(result_1fold['Training losses'])
-        result['Validation losses'].append(result_1fold['Validation losses'])
-        result['Default final test losses'].append(result_1fold['testing_loss'])
-        result['Training accuracies'].append(result_1fold['Training accuracy'])
-        result['Test accuracies'].append(result_1fold['Test accuracy'])
-        result['Training F1 scores'].append(result_1fold['Training F1 score'])
-        result['Test F1 scores'].append(result_1fold['Test F1 score'])
-        result['Default test accuracies'].append(result_1fold['testing_accuracy'])
-
+        # result['Default test accuracies'].append(result_onefold['testing_accuracy']) # Uncomment for validating the predicted accuracy
+        for key in params_to_collect:
+            result[key].append(result_onefold[key])
+        
     # Average accuracies and f1 scores
     zip_obj.close()
     dict_items_without_meanvalues = list(result.items())
     for key, value in dict_items_without_meanvalues:
-        result['Mean ' + key.lower()] = np.mean(value, axis=0)
-    # Make all numpy arrays
+        result[key + ' (mean)'] = np.mean(value, axis=0)
+    # Convert to numpy arrays
     for key, value in result.items():
         if type(value)==list:
             result[key] = np.array(value)
@@ -200,8 +191,8 @@ def kfold_vqc(feature_map, \
     clear_output()
     print('='*100)
     print('='*35 + f' {k}-fold VQC Classification ' + '='*35)
-    print(f"Mean training accuracy: {result['Mean training accuracies']:.2%} | Mean test accuracy: {result['Mean test accuracies']:.2%}")
-    print(f"Mean training F1 score: {result['Mean training f1 scores']:.2%} | Mean test F1 score: {result['Mean test f1 scores']:.2%}")
+    print(f"Training accuracy (mean): {result['Training accuracy (mean)']:.2%} | Test accuracy (mean): {result['Test accuracy (mean)']:.2%}")
+    print(f"Training F1 score (mean): {result['Training F1 score (mean)']:.2%} | Test F1 score (mean): {result['Test F1 score (mean)']:.2%}")
     print(f'All models are saved at {zip_filename}.\nResults are saved at {result_filename}.')
     print('='*100)
 
@@ -245,7 +236,7 @@ def binary_encoder(X):
         X_binary_encoded.append(bit_string)
     return np.array(X_binary_encoded)
 
-# Uegate Input Encoder
+# U3gate Input Encoder
 def U3gate_input_encoder(X):
     X_binary_encoded = binary_encoder(X)
     if len(X_binary_encoded[0]) % 3 != 0:
