@@ -15,7 +15,7 @@ def get_breast_cancer_data():
                             'irradiat'])  
     # Ordinal Encoding
     for col in df.columns:
-      df[col] = LabelEncoder().fit_transform(df[col])
+        df[col] = LabelEncoder().fit_transform(df[col])
   
     return df.drop(['target'], axis=1), df.target
 
@@ -43,9 +43,17 @@ def kfold_randomforest(X, y, k=5):
     return acc_list, f1_list, feature_importances_list
 
 # Dictionary to feed VQC
-def get_input_dict_for_VQC(X_train, X_test, y_train, y_test):
+def get_input_dict_for_VQC(X_train, X_test, y_train, y_test, positivedata_duplicate_ratio):
+    X_duplicate_shape = tuple([0] + list(X_train.shape)[1:])
+    X_duplicate = np.empty(X_duplicate_shape)
+    if positivedata_duplicate_ratio >= 0:
+        for i in range(int(positivedata_duplicate_ratio)):
+            X_duplicate = np.concatenate((X_duplicate, X_train[y_train==1]), axis=0)
+        X_duplicate = np.concatenate((X_duplicate, X_train[y_train == 1][:int((positivedata_duplicate_ratio - int(positivedata_duplicate_ratio))*X_train[y_train==1].shape[0])]), axis=0)
+    else:
+        raise ValueError('Please enter nonnegative real number')
     training_input = { 0: X_train[y_train == 0],
-                       1: X_train[y_train == 1]}
+                       1: np.concatenate((X_train[y_train == 1], X_duplicate), axis=0) }
     test_input = { 0: X_test[y_test == 0],
                    1: X_test[y_test == 1] }
     return training_input, test_input
@@ -54,15 +62,16 @@ def get_input_dict_for_VQC(X_train, X_test, y_train, y_test):
 def train_vqc(feature_map, \
               var_form, \
               backend, \
-              epoch, \
+              optimizer, \
               seed, \
               X_train, X_test, y_train, y_test, \
               model_filename, \
+              positivedata_duplicate_ratio=1, \
               shots=1024):
   
     # Input preparation
     # Input dict
-    training_input, test_input = get_input_dict_for_VQC(X_train, X_test, y_train, y_test)
+    training_input, test_input = get_input_dict_for_VQC(X_train, X_test, y_train, y_test, positivedata_duplicate_ratio)
     # Quantum instance
     quantum_instance = QuantumInstance(backend, shots=shots, seed_simulator=seed, seed_transpiler=seed,optimization_level=3)
     # Final zip file for temp models and its working directory
@@ -83,7 +92,7 @@ def train_vqc(feature_map, \
         np.savez(temp_model_filename, opt_params = model_params)
         zip_obj.write(temp_model_filename.split('/')[-1], compress_type=ZIP_DEFLATED)
         # Load the temp model
-        vqc_val = VQC(SPSA(0), feature_map, var_form, training_input, test_input)
+        vqc_val = VQC(optimizer, feature_map, var_form, training_input, test_input)
         vqc_val.load_model(temp_model_filename)
         os.remove(temp_model_filename)
         # Collect validation loss
@@ -92,7 +101,7 @@ def train_vqc(feature_map, \
         validation_loss_list.append(val_loss)
 
     # Run VQC
-    vqc = VQC(SPSA(epoch), feature_map, var_form, training_input, test_input, callback=callback_collector)
+    vqc = VQC(optimizer, feature_map, var_form, training_input, test_input, callback=callback_collector)
     result = vqc.run(quantum_instance)
     clear_output()
     print('Trained successfully!')
@@ -118,15 +127,15 @@ def train_vqc(feature_map, \
 def kfold_vqc(feature_map, \
               var_form, \
               backend, \
-              epoch, \
+              optimizer_generator, \
               seed, \
               X, y, \
               model_filename, \
               result_filename, \
               k=5, \
+              positivedata_duplicate_ratio=1, \
               shots=1024, \
-              seed_kfold=123123, \
-              double_positive_data=True):
+              seed_kfold=123123):
 
     print('='*100)
     print(f'{k}-fold VQC Classification')
@@ -147,20 +156,19 @@ def kfold_vqc(feature_map, \
     kf_id = list(kf.split(X))
     for (fold, (train_id, test_id)) in enumerate(kf_id, start=1):
         print('='*100 + f'\nFold number {fold}\n' + '='*100)
-        # Split data
+        # Split the data
         X_train, X_test, y_train, y_test = X[train_id], X[test_id], y[train_id], y[test_id]
-        # Double positive data
-        if double_positive_data:
-            X_train, y_train = np.concatenate((X_train, X_train[y_train==1]), axis=0), np.hstack((y_train, np.ones(np.sum(y_train==1))))
         # Train a model
         model_filename_fold = model_filename.split('.')[0] + f'_foldnumber{fold}.npz'
+        optimizer = optimizer_generator()
         result_onefold = train_vqc(feature_map, \
                                 var_form, \
                                 backend, \
-                                epoch, \
+                                optimizer, \
                                 seed, \
                                 X_train, X_test, y_train, y_test, \
                                 model_filename_fold, \
+                                positivedata_duplicate_ratio, \
                                 shots)
         # Save the trained model to the final zip file 
         # Final model
