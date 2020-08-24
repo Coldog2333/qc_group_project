@@ -1,3 +1,34 @@
+import numpy as np, pandas as pd, matplotlib.pyplot as plt, os
+from sklearn.preprocessing import OrdinalEncoder, LabelEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, KFold
+from sklearn.metrics import f1_score
+from IPython.display import clear_output
+from zipfile import ZipFile, ZIP_DEFLATED
+import pickle
+
+from qiskit import BasicAer
+from qiskit.providers.aer import QasmSimulator
+from qiskit.ml.datasets import *
+from qiskit.circuit.library import ZZFeatureMap
+from qiskit.aqua.components.feature_maps import SecondOrderExpansion
+from qiskit.aqua.utils import split_dataset_to_data_and_labels, map_label_to_class_name
+from qiskit.aqua import QuantumInstance
+from qiskit.aqua.algorithms import QSVM, VQC
+from qiskit.aqua.components import variational_forms
+from qiskit.aqua.components.optimizers import COBYLA, SPSA
+from sklearn.model_selection import KFold
+from sklearn.metrics import f1_score
+
+# Make feature map with encoder
+from qiskit.circuit import QuantumCircuit, Parameter
+from qiskit.circuit.library import TwoLocal
+from quantum_utils import CustomFeatureMap
+
+# # Self learning feature map
+# from bc_utils import MyVQC
+
 # Data preprocessing
 def get_breast_cancer_data():
     # Read the data
@@ -68,7 +99,7 @@ def train_vqc(feature_map, \
     # Final zip file for temp models and its working directory
     wdir = '/'.join(model_filename.split('/')[:-1])
     print('='*100 + f'\nWorking directory: {wdir}\n' + '='*100)  
-    os.chdir(wdir)  
+#     os.chdir(wdir)
     temp_model_zip_filename = model_filename.split('.')[0] + '_temp.zip'
     final_model_filename = model_filename.split('.')[0] + '_final.npz'
     zip_obj = ZipFile(temp_model_zip_filename, 'w')
@@ -81,7 +112,7 @@ def train_vqc(feature_map, \
         # Save a temp model
         temp_model_filename = model_filename.split('.')[0] + f'_evalcount{eval_count+1}.npz'
         np.savez(temp_model_filename, opt_params = model_params)
-        zip_obj.write(temp_model_filename.split('/')[-1], compress_type=ZIP_DEFLATED)
+        zip_obj.write(temp_model_filename, compress_type=ZIP_DEFLATED)
         # Load the temp model
         vqc_val = VQC(optimizer, feature_map, var_form, training_input, test_input)
         vqc_val.load_model(temp_model_filename)
@@ -90,10 +121,10 @@ def train_vqc(feature_map, \
         y_test_prob = vqc_val.predict(X_test, quantum_instance)[0]
         val_loss = -np.mean(y_test*np.log(y_test_prob[:,1]) + (1 - y_test)*np.log(y_test_prob[:,0]))
         validation_loss_list.append(val_loss)
-        # Collect training loss
-        y_train_prob = vqc_val.predict(X_train, quantum_instance)[0]
-        train_loss = -np.mean(y_train*np.log(y_train_prob[:,1]) + (1 - y_train)*np.log(y_train_prob[:,0]))
-        training_loss_list.append(train_loss)
+#         # Collect training loss
+#         y_train_prob = vqc_val.predict(X_train, quantum_instance)[0]
+#         train_loss = -np.mean(y_train*np.log(y_train_prob[:,1]) + (1 - y_train)*np.log(y_train_prob[:,0]))
+#         training_loss_list.append(train_loss)
 
     # Run VQC
     vqc = VQC(optimizer, feature_map, var_form, training_input, test_input, callback=callback_collector)
@@ -114,7 +145,7 @@ def train_vqc(feature_map, \
 
     # Save results
     result['Default training losses'] = np.array(default_training_loss_list)
-    result['Training losses'] = np.array(training_loss_list)
+#     result['Training losses'] = np.array(training_loss_list)
     result['Validation losses'] = np.array(validation_loss_list)
     result['Training F1 score'], result['Training accuracy'] = f1_train, acc_train
     result['Test F1 score'], result['Test accuracy'] = f1_test, acc_test
@@ -124,7 +155,7 @@ def train_vqc(feature_map, \
 def kfold_vqc(feature_map, \
               var_form, \
               backend, \
-              optimizer, \
+              optimizer_gen, \
               seed, \
               X, y, \
               model_filename, \
@@ -132,15 +163,17 @@ def kfold_vqc(feature_map, \
               k=5, \
               shots=1024, \
               seed_kfold=123123, \
-              double_positive_data=True):
+              double_positive_data=True,
+              one_third_positive_data=False):
 
     print('='*100)
     print(f'{k}-fold VQC Classification')
     # Final zip file for saving and its directory
     wdir = '/'.join(model_filename.split('/')[:-1])
     print('='*100 + f'\nWorking directory: {wdir}\n' + '='*100)
-    os.chdir(wdir)
+#     os.chdir(wdir)
     zip_filename = model_filename.split('.')[0] + '.zip'
+    print(zip_filename)
     zip_obj = ZipFile(zip_filename, 'w')
     # Final result initialization (dict)
     result = dict()
@@ -155,8 +188,11 @@ def kfold_vqc(feature_map, \
         # Double positive data
         if double_positive_data:
             X_train, y_train = np.concatenate((X_train, X_train[y_train==1]), axis=0), np.hstack((y_train, np.ones(np.sum(y_train==1))))
+        elif one_third_positive_data:
+            X_train, y_train = np.concatenate([X_train, X_train[:len(X_train)//3]], axis=0), np.hstack((y_train, np.ones(len(X_train)//3)))
         # Train a model
         model_filename_fold = model_filename.split('.')[0] + f'_foldnumber{fold}.npz'
+        optimizer = optimizer_gen()
         result_1fold = train_vqc(feature_map, \
                                 var_form, \
                                 backend, \
@@ -168,15 +204,15 @@ def kfold_vqc(feature_map, \
         # Save the trained model to the final zip file 
         # Final model
         final_model_filename_fold = model_filename_fold.split('.')[0] + '_final.npz'
-        zip_obj.write(final_model_filename_fold.split('/')[-1], compress_type=ZIP_DEFLATED)
+        zip_obj.write(final_model_filename_fold, compress_type=ZIP_DEFLATED)
         os.remove(final_model_filename_fold)
         # Temp model
         temp_model_zip_filename_fold = model_filename_fold.split('.')[0] + '_temp.zip'
-        zip_obj.write(temp_model_zip_filename_fold.split('/')[-1], compress_type=ZIP_DEFLATED)
+        zip_obj.write(temp_model_zip_filename_fold, compress_type=ZIP_DEFLATED)
         os.remove(temp_model_zip_filename_fold)
         # Collect results
         result['Default training losses'].append(result_1fold['Default training losses'])
-        result['Training losses'].append(result_1fold['Training losses'])
+#         result['Training losses'].append(result_1fold['Training losses'])
         result['Validation losses'].append(result_1fold['Validation losses'])
         result['Default final test losses'].append(result_1fold['testing_loss'])
         result['Training accuracies'].append(result_1fold['Training accuracy'])
