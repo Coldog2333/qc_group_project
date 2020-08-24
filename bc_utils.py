@@ -165,9 +165,7 @@ def kfold_vqc(feature_map, \
               k=5, \
               positivedata_duplicate_ratio=1, \
               shots=1024, \
-              seed_kfold=123123, \
-              double_positive_data=True,
-              one_third_positive_data=False):
+              seed_kfold=123123)
 
     print('='*100)
     print(f'{k}-fold VQC Classification')
@@ -191,11 +189,6 @@ def kfold_vqc(feature_map, \
         print('='*100 + f'\nFold number {fold}\n' + '='*100)
         # Split the data
         X_train, X_test, y_train, y_test = X[train_id], X[test_id], y[train_id], y[test_id]
-        # Double positive data
-        if double_positive_data:
-            X_train, y_train = np.concatenate((X_train, X_train[y_train==1]), axis=0), np.hstack((y_train, np.ones(np.sum(y_train==1))))
-        elif one_third_positive_data:
-            X_train, y_train = np.concatenate([X_train, X_train[:len(X_train)//3]], axis=0), np.hstack((y_train, np.ones(len(X_train)//3)))
         # Train a model
         model_filename_fold = model_filename.split('.')[0] + f'_foldnumber{fold}.npz'
         optimizer = optimizer_generator()
