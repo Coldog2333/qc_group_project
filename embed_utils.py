@@ -62,7 +62,8 @@ class MyVQC(VQAlgorithm):
             max_evals_grouped: int = 1,
             minibatch_size: int = -1,
             callback: Optional[Callable[[int, np.ndarray, float, int], None]] = None,
-            quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
+            quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None,
+            randomizer: str = 'uniform') -> None:
         """
         Args:
             optimizer: The classical optimizer to use.
@@ -107,6 +108,7 @@ class MyVQC(VQAlgorithm):
         self._eval_time = None
         self.batch_num = None
         self._optimizer.set_max_evals_grouped(max_evals_grouped)
+        self._randomizer = randomizer
 
         self._callback = callback
 
@@ -300,7 +302,12 @@ class MyVQC(VQAlgorithm):
         self._batch_index = 0
 
         if self.initial_point is None:
-            self.initial_point = self.random.standard_normal(self._var_form.num_parameters)
+            if self._randomizer == "standard_normal":
+                self.initial_point = self.random.standard_normal(self._var_form.num_parameters)
+            elif self._randomizer == "uniform":
+                self.initial_point = self.random.uniform(-3.14/2, 3.14/2, self._var_form.num_parameters)
+            else:
+                raise ValueError
 
         self._eval_count = 0
 
@@ -363,6 +370,7 @@ class MyVQC(VQAlgorithm):
             predicted_probs = [predicted_probs]
         for i, _ in enumerate(predicted_probs):
             curr_cost = cost_estimate(predicted_probs[i], self._label_batches[batch_index])
+            train_acc = np.mean(predicted_probs[i].argmax(1) == self._label_batches[batch_index])
             total_cost.append(curr_cost)
             if self._callback is not None:
                 self._callback(
@@ -370,7 +378,8 @@ class MyVQC(VQAlgorithm):
                     theta[i * self._var_form.num_parameters:(i + 1)
                           * self._var_form.num_parameters],
                     curr_cost,
-                    self._batch_index
+                    self._batch_index,
+                    train_acc
                 )
             self._eval_count += 1
         if not self.is_gradient_really_supported():
