@@ -178,7 +178,10 @@ class MyVQC(VQAlgorithm):
             qc.append(circuit.to_instruction(), qr)
         else:
             # Set input to varform
-            qc += self._var_form.construct_circuit(x, theta, qr)
+            try:
+                qc += self._var_form.construct_circuit(x, theta, qr)
+            except:
+                qc += self._var_form.construct_circuit(theta, qr)
 
         if measurement:
             qc.barrier(qr)
@@ -305,7 +308,7 @@ class MyVQC(VQAlgorithm):
             if self._randomizer == "standard_normal":
                 self.initial_point = self.random.standard_normal(self._var_form.num_parameters)
             elif self._randomizer == "uniform":
-                self.initial_point = self.random.uniform(-3.14/2, 3.14/2, self._var_form.num_parameters)
+                self.initial_point = np.concatenate([self.random.uniform(-3.14/2, 3.14/2, self._var_form.num_qubits * 16), self.random.standard_normal(self._var_form.num_parameters - self._var_form.num_qubits * 16)], axis=0)
             else:
                 raise ValueError
 

@@ -139,8 +139,8 @@ class MyRYRZ(VariationalForm):
 
         for qubit in range(self._num_qubits):
             st = x[qubit * 3: (qubit+1) * 3]
-            circuit.u3(parameters[qubit * self._num_qubits * 2 + mapping[st]],
-                       parameters[qubit * self._num_qubits * 2 + mapping[st] + 1],
+            circuit.u3(parameters[qubit * 16 + 2*mapping[st]],
+                       parameters[qubit * 16 + 2*mapping[st] + 1],
                        0,
                        q[qubit])
 
