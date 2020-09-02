@@ -63,7 +63,8 @@ class MyVQC(VQAlgorithm):
             minibatch_size: int = -1,
             callback: Optional[Callable[[int, np.ndarray, float, int], None]] = None,
             quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None,
-            randomizer: str = 'uniform') -> None:
+            lamb: Optional[float] = None, 
+            randomizer: str = 'standard_normal') -> None:
         """
         Args:
             optimizer: The classical optimizer to use.
@@ -109,6 +110,7 @@ class MyVQC(VQAlgorithm):
         self.batch_num = None
         self._optimizer.set_max_evals_grouped(max_evals_grouped)
         self._randomizer = randomizer
+        self._lamb = lamb
 
         self._callback = callback
 
@@ -304,11 +306,28 @@ class MyVQC(VQAlgorithm):
         self._batches, self._label_batches = self.batch_data(data, labels, minibatch_size)
         self._batch_index = 0
 
+        theta1 = np.arccos(1/np.sqrt(3))
+        theta2 = np.arccos(-1/np.sqrt(3))
+        varphi1 = np.pi / 4
+        varphi2 = 3 * np.pi / 4
+        qrac_init_points = [
+            theta1, varphi1,
+            theta1, varphi2,
+            theta1, -varphi2,
+            theta1, -varphi1,
+            theta2, varphi1,
+            theta2, varphi2,
+            theta2, -varphi2,
+            theta2, -varphi1
+        ]
+        
         if self.initial_point is None:
             if self._randomizer == "standard_normal":
                 self.initial_point = self.random.standard_normal(self._var_form.num_parameters)
             elif self._randomizer == "uniform":
                 self.initial_point = np.concatenate([self.random.uniform(-3.14/2, 3.14/2, self._var_form.num_qubits * 16), self.random.standard_normal(self._var_form.num_parameters - self._var_form.num_qubits * 16)], axis=0)
+            elif self._randomizer == "qrac_style":
+                self.initial_point = np.concatenate([qrac_init_points * self._var_form.num_qubits, self.random.standard_normal(self._var_form.num_parameters - self._var_form.num_qubits * 16)], axis=0)
             else:
                 raise ValueError
 
@@ -365,6 +384,29 @@ class MyVQC(VQAlgorithm):
             self._batch_index += 1  # increment the batch after gradient callback
         return grad
 
+    def _compute_dispersion(self, theta):
+        num_qubit = self._var_form._num_qubits
+#         vectors = []
+        
+        def get_sigma(data):
+            mean = np.mean(data, 0)
+            diff = data - mean
+            return diff.T.dot(diff)
+        
+        cost = 0
+        for qubit in range(num_qubit):
+            vectors = []
+            for i in range(8):
+                theta_ = theta[qubit * 16 + 2 * i]
+                varphi_ = theta[qubit * 16 + 2 * i + 1]
+                vectors.append([np.sin(theta_) * np.cos(varphi_), np.sin(theta_) * np.sin(varphi_), np.cos(theta_)])
+                
+            cost += np.linalg.det(get_sigma(vectors))
+            
+        # The higher spread, the better
+        return -cost / num_qubit
+                
+    
     def _cost_function_wrapper(self, theta):
         batch_index = self._batch_index % len(self._batches)
         predicted_probs, _ = self._get_prediction(self._batches[batch_index], theta)
@@ -373,6 +415,7 @@ class MyVQC(VQAlgorithm):
             predicted_probs = [predicted_probs]
         for i, _ in enumerate(predicted_probs):
             curr_cost = cost_estimate(predicted_probs[i], self._label_batches[batch_index])
+            if self._lamb is not None: curr_cost += self._lamb * self._compute_dispersion(theta)
             train_acc = np.mean(predicted_probs[i].argmax(1) == self._label_batches[batch_index])
             total_cost.append(curr_cost)
             if self._callback is not None:
