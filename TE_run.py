@@ -158,7 +158,6 @@ def kfold_vqc(feature_map, \
         with open(result_filename + f'_fold{fold}', 'wb') as f:
             pickle.dump(result_onefold, f)
 
-        break
 
     # Average accuracies and f1 scores
     dict_items_without_meanvalues = list(result.items())
@@ -209,7 +208,7 @@ backend = provider.get_backend('ibmq_toronto')
 #backend = QasmSimulator({"method": "statevector_gpu"})
 
 # Test Run VQC (CustomFeatureMap)
-seed, epoch = 666, 1
+seed, epoch = 666, 100
 optimizer = lambda: SPSA(epoch)
 result_bc_depth4_reg = kfold_vqc(feature_map, \
                     var_form, \
